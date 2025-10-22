@@ -32,7 +32,7 @@ class SettingImpl implements Setting {
 		if (!Files.isDirectory(source)) {
 			throw new PathException(source, "source isn't a directory");
 		}
-		destination = Path.of(properties.destination());
+		destination = Path.of(properties.destination() == null ? "" : properties.destination());
 		if (Files.notExists(destination)) {
 			Files.createDirectory(destination);
 		}
