@@ -8,8 +8,10 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import ua.od.whcrow.bfpu.cli.actions.HelpAction;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionNotFoundException;
 
+import java.util.Arrays;
 import java.util.Set;
 
 @SpringBootApplication
@@ -33,9 +35,12 @@ public class Application implements CommandLineRunner {
 	@Override
 	public void run(@Nonnull String... args)
 			throws Exception {
-		Setting setting = new SettingImpl(properties);
-		LOG.info("{}", setting);
-		for (String actionName : properties.actions()) {
+		String[] actionNames = properties.actions() == null ? new String[]{HelpAction.ACTION_NAME} : properties.actions();
+		LOG.info("Actions: {}", String.join(", ", actionNames));
+		Setting setting = new SettingImpl(properties,
+				Arrays.stream(actionNames).allMatch(a -> a.equals(HelpAction.ACTION_NAME)));
+		LOG.info("Setting: {}", setting);
+		for (String actionName : actionNames) {
 			long start = System.currentTimeMillis();
 			actions.stream()
 					.filter(a -> a.getName().equals(actionName))

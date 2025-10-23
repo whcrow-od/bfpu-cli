@@ -4,6 +4,8 @@ import jakarta.annotation.Nonnull;
 
 public interface Action {
 	
+	String PN_ACTION_NAME = "actions";
+	
 	@Nonnull
 	String getName();
 	

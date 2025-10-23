@@ -4,6 +4,7 @@ import io.micrometer.common.util.StringUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 import ua.od.whcrow.bfpu.cli.exceptions.PathException;
 import ua.od.whcrow.bfpu.cli.exceptions.PathNotFoundException;
 import ua.od.whcrow.bfpu.cli.exceptions.SettingException;
@@ -20,12 +21,16 @@ class SettingImpl implements Setting {
 	private final String glob;
 	private final boolean failTolerant;
 	
-	SettingImpl(@Nonnull Properties properties)
+	SettingImpl(@Nonnull Properties properties, boolean helpOnly)
 			throws SettingException, IOException {
 		if (StringUtils.isBlank(properties.source())) {
-			throw new SettingException("Source cannot be blank");
+			if (!helpOnly) {
+				throw new SettingException("Source cannot be blank");
+			}
+			source = Path.of("");
+		} else {
+			source = Path.of(properties.source());
 		}
-		source = Path.of(properties.source());
 		if (Files.notExists(source)) {
 			throw new PathNotFoundException(source, "source not found");
 		}
@@ -71,7 +76,7 @@ class SettingImpl implements Setting {
 	
 	@Override
 	public String toString() {
-		return new ToStringBuilder(this)
+		return new ToStringBuilder(this, ToStringStyle.NO_CLASS_NAME_STYLE)
 				.append("source", getSource().toAbsolutePath())
 				.append("destination", getDestination().toAbsolutePath())
 				.append("recursive", isRecursive())

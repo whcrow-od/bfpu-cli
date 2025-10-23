@@ -9,6 +9,7 @@ import org.springframework.boot.logging.LogLevel;
 import org.springframework.stereotype.Component;
 import ua.od.whcrow.bfpu.cli.Action;
 import ua.od.whcrow.bfpu.cli.Setting;
+import ua.od.whcrow.bfpu.cli._commons.ConditionalOnArrayPropertyContains;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionException;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionInitException;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionPropertyException;
@@ -26,9 +27,14 @@ import java.util.function.BiPredicate;
 import java.util.stream.Stream;
 
 @Component
+@ConditionalOnArrayPropertyContains(
+		name = CommandLineAction.PN_ACTION_NAME,
+		containsValue = CommandLineAction.ACTION_NAME
+)
 class CommandLineAction implements Action {
 	
-	private static final String ACTION_NAME = "command-line";
+	static final String ACTION_NAME = "command-line";
+	
 	private static final String PN_COMMAND = ACTION_NAME + ".command";
 	private static final String PN_OUTPUT_LOG_LEVEL = ACTION_NAME + ".output-log-level";
 	private static final String PN_IGNORE_EXIT_CODE = ACTION_NAME + ".ignore-exit-code";
