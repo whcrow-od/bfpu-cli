@@ -1,29 +1,19 @@
 package ua.od.whcrow.bfpu.cli.actions;
 
-import io.micrometer.common.util.StringUtils;
 import jakarta.annotation.Nonnull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.stereotype.Component;
-import ua.od.whcrow.bfpu.cli.Action;
 import ua.od.whcrow.bfpu.cli.Setting;
 import ua.od.whcrow.bfpu.cli._commons.ConditionalOnArrayPropertyContains;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionException;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionInitException;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionPropertyException;
-import ua.od.whcrow.bfpu.cli.exceptions.ActionRuntimeException;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.util.function.BiPredicate;
 import java.util.stream.Stream;
 
 @Component
@@ -31,7 +21,7 @@ import java.util.stream.Stream;
 		name = CommandLineAction.PN_ACTION_NAME,
 		containsValue = CommandLineAction.ACTION_NAME
 )
-class CommandLineAction implements Action {
+class CommandLineAction extends AbstractAction {
 	
 	static final String ACTION_NAME = "command-line";
 	
@@ -40,8 +30,6 @@ class CommandLineAction implements Action {
 	private static final String PN_IGNORE_EXIT_CODE = ACTION_NAME + ".ignore-exit-code";
 	
 	private static final String OUTPUT_LOG_MESSAGE = "Command for {} outputs:\n{}";
-	
-	private static final Logger LOG = LoggerFactory.getLogger(CommandLineAction.class);
 	
 	private final String commandFormat;
 	private final LogLevel outputLogLevel;
@@ -69,69 +57,45 @@ class CommandLineAction implements Action {
 	public void run(@Nonnull Setting setting)
 			throws Exception {
 		try (Stream<Path> pathStream = createPathStream(setting)) {
-			pathStream.forEach(sourceFile -> processFile(sourceFile, setting));
-		}
-	}
-	
-	@Nonnull
-	private Stream<Path> createPathStream(@Nonnull Setting setting)
-			throws IOException {
-		PathMatcher fileNameMatcher = StringUtils.isBlank(setting.getGlob())
-				? null : FileSystems.getDefault().getPathMatcher("glob:" + setting.getGlob());
-		BiPredicate<Path,BasicFileAttributes> filePredicate = fileNameMatcher == null
-				? (path, attr) -> attr.isRegularFile()
-				: (path, attr) -> attr.isRegularFile() && fileNameMatcher.matches(path.getFileName());
-		return setting.isRecursive()
-				? Files.find(setting.getSource(), Integer.MAX_VALUE, filePredicate)
-				: Files.find(setting.getSource(), 1, filePredicate);
-	}
-	
-	private void processFile(@Nonnull Path sourceFile, @Nonnull Setting setting)
-			throws ActionRuntimeException {
-		Path fileRelPath = setting.getSource().relativize(sourceFile);
-		Path targetFile = setting.getDestination().resolve(fileRelPath);
-		if (Files.notExists(targetFile.getParent())) {
-			try {
-				Files.createDirectories(targetFile.getParent());
-			} catch (IOException e) {
-				String message = "Failed to create a target sub-dir/s for " + sourceFile;
-				if (setting.isFailTolerant()) {
-					LOG.warn(message, e);
-					return;
-				}
-				throw new ActionRuntimeException(getName(), message, e);
+			for (Path sourceFilePath : (Iterable<Path>) pathStream::iterator) {
+				processFile(sourceFilePath, setting);
 			}
 		}
+	}
+	
+	private void processFile(@Nonnull Path sourceFilePath, @Nonnull Setting setting)
+			throws ActionException {
+		Path targetFilePath = buildTargetFilePath(sourceFilePath, setting);
 		try {
-			execCommand(sourceFile, targetFile);
+			execCommand(sourceFilePath, targetFilePath);
 		} catch (Exception e) {
-			String message = "Failed to execute a command for " + sourceFile;
+			String message = "Failed to execute a command for " + sourceFilePath;
 			if (setting.isFailTolerant()) {
-				LOG.warn(message, e);
+				logger.warn(message, e);
 				return;
 			}
-			throw new ActionRuntimeException(getName(), message, e);
+			throw new ActionException(getName(), message, e);
 		}
 	}
 	
-	private void execCommand(@Nonnull Path sourceFile, @Nonnull Path targetFile)
+	private void execCommand(@Nonnull Path sourceFilePath, @Nonnull Path targetFilePath)
 			throws IOException, InterruptedException, ActionException {
 		long start = System.currentTimeMillis();
 		String commandLine = commandFormat
-				.replace("%source%", sourceFile.toAbsolutePath().toString())
-				.replace("%target%", targetFile.toAbsolutePath().toString());
-		LOG.debug("Running a command: {}", commandLine);
+				.replace("%source%", sourceFilePath.toAbsolutePath().toString())
+				.replace("%target%", targetFilePath.toAbsolutePath().toString());
+		logger.debug("Running a command: {}", commandLine);
 		// TODO: implement more sophisticated splitter for command
 		Process process = new ProcessBuilder(commandLine.split("\\s+"))
 				.redirectErrorStream(true)
 				.start();
-		handleOutput(process, sourceFile.toString());
+		handleOutput(process, sourceFilePath.toString());
 		int exitCode = process.waitFor();
 		if (exitCode == 0 || ignoreExitCode) {
-			LOG.info("Command run for {} took {} ms", sourceFile, System.currentTimeMillis() - start);
+			logger.info("Command run for {} took {} ms", sourceFilePath, System.currentTimeMillis() - start);
 			return;
 		}
-		throw new ActionException(getName(), "Command run for " + sourceFile + " exits with code " + exitCode);
+		throw new ActionException(getName(), "Command run for " + sourceFilePath + " exits with code " + exitCode);
 	}
 	
 	private void handleOutput(@Nonnull Process process, @Nonnull String sourceFile)
@@ -143,11 +107,11 @@ class CommandLineAction implements Action {
 			String line;
 			while ((line = reader.readLine()) != null) {
 				switch (outputLogLevel) {
-					case TRACE -> LOG.trace(OUTPUT_LOG_MESSAGE, sourceFile, line);
-					case DEBUG -> LOG.debug(OUTPUT_LOG_MESSAGE, sourceFile, line);
-					case INFO -> LOG.info(OUTPUT_LOG_MESSAGE, sourceFile, line);
-					case WARN -> LOG.warn(OUTPUT_LOG_MESSAGE, sourceFile, line);
-					case ERROR, FATAL -> LOG.error(OUTPUT_LOG_MESSAGE, sourceFile, line);
+					case TRACE -> logger.trace(OUTPUT_LOG_MESSAGE, sourceFile, line);
+					case DEBUG -> logger.debug(OUTPUT_LOG_MESSAGE, sourceFile, line);
+					case INFO -> logger.info(OUTPUT_LOG_MESSAGE, sourceFile, line);
+					case WARN -> logger.warn(OUTPUT_LOG_MESSAGE, sourceFile, line);
+					case ERROR, FATAL -> logger.error(OUTPUT_LOG_MESSAGE, sourceFile, line);
 				}
 			}
 		}
