@@ -67,7 +67,7 @@ class FFmpegConverter extends AbstractAction {
 					String message = "Failed to convert the source file " + sourceFilePath;
 					if (setting.isFailTolerant()) {
 						logger.warn(message, e);
-						return;
+						continue;
 					}
 					if (e instanceof ActionRunException) {
 						throw (ActionRunException) e;
