@@ -4,6 +4,7 @@ import jakarta.annotation.Nonnull;
 import org.springframework.stereotype.Component;
 import ua.od.whcrow.bfpu.cli.Action;
 import ua.od.whcrow.bfpu.cli.Setting;
+import ua.od.whcrow.bfpu.cli.exceptions.ActionRunException;
 
 @Component
 public class HelpAction implements Action {
@@ -18,7 +19,7 @@ public class HelpAction implements Action {
 	
 	@Override
 	public void run(@Nonnull Setting setting)
-			throws Exception {
+			throws ActionRunException {
 		//TODO: implement
 	}
 	

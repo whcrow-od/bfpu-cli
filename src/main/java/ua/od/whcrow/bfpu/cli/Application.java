@@ -35,7 +35,8 @@ public class Application implements CommandLineRunner {
 	@Override
 	public void run(@Nonnull String... args)
 			throws Exception {
-		String[] actionNames = properties.actions() == null ? new String[]{HelpAction.ACTION_NAME} : properties.actions();
+		String[] actionNames = properties.actions() == null
+				? new String[]{HelpAction.ACTION_NAME} : properties.actions();
 		LOG.info("Actions: {}", String.join(", ", actionNames));
 		Setting setting = new SettingImpl(properties,
 				Arrays.stream(actionNames).allMatch(a -> a.equals(HelpAction.ACTION_NAME)));

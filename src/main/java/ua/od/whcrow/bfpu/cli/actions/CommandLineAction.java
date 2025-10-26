@@ -6,9 +6,9 @@ import org.springframework.boot.logging.LogLevel;
 import org.springframework.stereotype.Component;
 import ua.od.whcrow.bfpu.cli.Setting;
 import ua.od.whcrow.bfpu.cli._commons.ConditionalOnArrayPropertyContains;
-import ua.od.whcrow.bfpu.cli.exceptions.ActionException;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionInitException;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionPropertyException;
+import ua.od.whcrow.bfpu.cli.exceptions.ActionRunException;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -55,7 +55,7 @@ class CommandLineAction extends AbstractAction {
 	
 	@Override
 	public void run(@Nonnull Setting setting)
-			throws Exception {
+			throws ActionRunException {
 		try (Stream<Path> pathStream = createPathStream(setting)) {
 			for (Path sourceFilePath : (Iterable<Path>) pathStream::iterator) {
 				processFile(sourceFilePath, setting);
@@ -64,22 +64,22 @@ class CommandLineAction extends AbstractAction {
 	}
 	
 	private void processFile(@Nonnull Path sourceFilePath, @Nonnull Setting setting)
-			throws ActionException {
+			throws ActionRunException {
 		Path targetFilePath = buildTargetFilePath(sourceFilePath, setting);
 		try {
 			execCommand(sourceFilePath, targetFilePath);
-		} catch (Exception e) {
+		} catch (IOException | InterruptedException e) {
 			String message = "Failed to execute a command for " + sourceFilePath;
 			if (setting.isFailTolerant()) {
 				logger.warn(message, e);
 				return;
 			}
-			throw new ActionException(getName(), message, e);
+			throw new ActionRunException(getName(), message, e);
 		}
 	}
 	
 	private void execCommand(@Nonnull Path sourceFilePath, @Nonnull Path targetFilePath)
-			throws IOException, InterruptedException, ActionException {
+			throws IOException, InterruptedException, ActionRunException {
 		long start = System.currentTimeMillis();
 		String commandLine = commandFormat
 				.replace("%source%", sourceFilePath.toAbsolutePath().toString())
@@ -95,7 +95,7 @@ class CommandLineAction extends AbstractAction {
 			logger.info("Command run for {} took {} ms", sourceFilePath, System.currentTimeMillis() - start);
 			return;
 		}
-		throw new ActionException(getName(), "Command run for " + sourceFilePath + " exits with code " + exitCode);
+		throw new ActionRunException(getName(), "Command run for " + sourceFilePath + " exits with code " + exitCode);
 	}
 	
 	private void handleOutput(@Nonnull Process process, @Nonnull String sourceFile)

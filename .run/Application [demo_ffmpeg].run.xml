@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Application [demo_ffmpeg]" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="ua.od.whcrow.bfpu.cli.Application" />
+    <module name="bfpu-cli" />
+    <option name="PROGRAM_PARAMETERS" value="--spring.profiles.active=demo_ffmpeg" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

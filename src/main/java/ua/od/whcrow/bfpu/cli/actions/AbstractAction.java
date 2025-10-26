@@ -2,6 +2,7 @@ package ua.od.whcrow.bfpu.cli.actions;
 
 import io.micrometer.common.util.StringUtils;
 import jakarta.annotation.Nonnull;
+import org.apache.commons.io.FilenameUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ua.od.whcrow.bfpu.cli.Action;
@@ -59,6 +60,16 @@ public abstract class AbstractAction implements Action {
 	protected Path buildTargetFilePath(@Nonnull Path sourceFile, @Nonnull Setting setting)
 			throws ActionRunException {
 		return buildTargetFilePath(setting.getSource(), sourceFile, setting.getDestination());
+	}
+	
+	@Nonnull
+	protected Path withExtension(@Nonnull Path filePath, @Nonnull String extension) {
+		String fileName = filePath.getFileName().toString();
+		if (FilenameUtils.isExtension(fileName, extension)) {
+			return filePath;
+		}
+		fileName = FilenameUtils.removeExtension(fileName) + FilenameUtils.EXTENSION_SEPARATOR + extension;
+		return filePath.resolveSibling(fileName);
 	}
 	
 }

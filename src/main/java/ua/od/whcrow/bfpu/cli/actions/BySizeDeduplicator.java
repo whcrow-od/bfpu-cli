@@ -4,6 +4,7 @@ import jakarta.annotation.Nonnull;
 import org.springframework.stereotype.Component;
 import ua.od.whcrow.bfpu.cli.Setting;
 import ua.od.whcrow.bfpu.cli._commons.ConditionalOnArrayPropertyContains;
+import ua.od.whcrow.bfpu.cli.exceptions.ActionRunException;
 
 @Component
 @ConditionalOnArrayPropertyContains(
@@ -22,7 +23,7 @@ class BySizeDeduplicator extends AbstractAction {
 	
 	@Override
 	public void run(@Nonnull Setting setting)
-			throws Exception {
+			throws ActionRunException {
 		//TODO: implement
 		logger.warn("ACTION IS NOT IMPLEMENTED YET");
 	}

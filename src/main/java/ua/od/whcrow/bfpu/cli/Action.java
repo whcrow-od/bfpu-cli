@@ -1,6 +1,7 @@
 package ua.od.whcrow.bfpu.cli;
 
 import jakarta.annotation.Nonnull;
+import ua.od.whcrow.bfpu.cli.exceptions.ActionRunException;
 
 public interface Action {
 	
@@ -10,6 +11,6 @@ public interface Action {
 	String getName();
 	
 	void run(@Nonnull Setting setting)
-			throws Exception;
+			throws ActionRunException;
 	
 }
