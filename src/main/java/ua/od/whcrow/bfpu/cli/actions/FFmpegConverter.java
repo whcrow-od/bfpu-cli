@@ -1,6 +1,8 @@
 package ua.od.whcrow.bfpu.cli.actions;
 
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
+import org.bytedeco.ffmpeg.avcodec.AVCodec;
 import org.bytedeco.ffmpeg.global.avcodec;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
@@ -17,8 +19,9 @@ import ua.od.whcrow.bfpu.cli.exceptions.ActionRunException;
 import java.lang.reflect.Modifier;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.Hashtable;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Component
@@ -32,22 +35,23 @@ class FFmpegConverter extends AbstractAction {
 	static final String ACTION_NAME = "ffmpeg-converter";
 	
 	private static final String AV_CODEC_ID_PREFIX = "AV_CODEC_ID_";
-	private static final NamedMap<String,Integer> CODEC_MAP = new NamedMap<>("list of codec");
+	private static final Map<String,Integer> CODEC_MAP;
 	
 	static {
-		Arrays.stream(avcodec.class.getFields())
+		CODEC_MAP = Arrays.stream(avcodec.class.getFields())
 				.filter(f -> Modifier.isStatic(f.getModifiers()))
 				.filter(f -> f.getName().startsWith(AV_CODEC_ID_PREFIX))
 				.filter(f -> f.getType() == int.class)
-				.forEach(f -> CODEC_MAP.put(f.getName().substring(AV_CODEC_ID_PREFIX.length()),
-						(Integer) ExceptionUtil.sneakySupply(() -> f.get(null))));
+				.collect(Collectors.toMap(
+						f -> f.getName().substring(AV_CODEC_ID_PREFIX.length()),
+						f -> (Integer) ExceptionUtil.sneakySupply(() -> f.get(null))
+				));
 	}
 	
 	private final FFmpegConverterProperties properties;
 	
 	FFmpegConverter(@Nonnull FFmpegConverterProperties properties) {
 		this.properties = properties;
-		FFmpegConverterOutputLogCallback.set(properties.outputLogLevel());
 	}
 	
 	@Nonnull
@@ -59,18 +63,20 @@ class FFmpegConverter extends AbstractAction {
 	@Override
 	public void run(@Nonnull Setting setting)
 			throws ActionRunException {
+		logger.info("Setting: {}", properties);
+		FFmpegConverterOutputLogCallback.set(properties.outputLogLevel());
+		Integer videoCodecId = getCodecId(properties.videoEncoder(), properties.videoCodec(), "video");
+		Integer audioCodecId = getCodecId(properties.audioEncoder(), properties.audioCodec(), "audio");
 		try (Stream<Path> pathStream = createPathStream(setting)) {
 			for (Path sourceFilePath : (Iterable<Path>) pathStream::iterator) {
 				try {
-					processFile(sourceFilePath, setting);
-				} catch (Exception e) {
+					processFile(sourceFilePath, buildTargetFilePath(sourceFilePath, setting), videoCodecId,
+							audioCodecId);
+				} catch (FrameGrabber.Exception | FrameRecorder.Exception e) {
 					String message = "Failed to convert the source file " + sourceFilePath;
 					if (setting.isFailTolerant()) {
 						logger.warn(message, e);
 						continue;
-					}
-					if (e instanceof ActionRunException) {
-						throw (ActionRunException) e;
 					}
 					throw new ActionRunException(getName(), message, e);
 				}
@@ -78,21 +84,58 @@ class FFmpegConverter extends AbstractAction {
 		}
 	}
 	
-	private void processFile(@Nonnull Path sourceFilePath, @Nonnull Setting setting)
-			throws ActionRunException, FrameGrabber.Exception, FrameRecorder.Exception {
-		Path targetFilePath = buildTargetFilePath(sourceFilePath, setting);
+	@Nullable
+	private Integer getCodecId(@Nullable String encoder, @Nullable String codec, @Nonnull String codecType)
+			throws ActionRunException {
+		if (encoder == null && codec == null) {
+			return null;
+		}
+		try (AVCodec avCodec = encoder == null
+				? avcodec.avcodec_find_encoder(getCodecId(codec, codecType))
+				: avcodec.avcodec_find_encoder_by_name(encoder)
+		) {
+			if (avCodec == null) {
+				throw new ActionRunException(getName(), "Required " + codecType + " codec "
+						+ Objects.requireNonNullElse(encoder, codec) + " is not found");
+			}
+			logger.info("Found required {} codec {}", codecType, avCodec.long_name().getString());
+			return avCodec.id();
+		}
+	}
+	
+	private int getCodecId(@Nonnull String codec, @Nonnull String codecType)
+			throws ActionRunException {
+		Integer value = CODEC_MAP.get(codec.toUpperCase());
+		if (value == null) {
+			throw new ActionRunException(getName(), "Required " + codecType + " codec " + codec + " is not registered");
+		}
+		return value;
+	}
+	
+	@Nonnull
+	@Override
+	protected Path buildTargetFilePath(@Nonnull Path sourceFilePath, @Nonnull Setting setting)
+			throws ActionRunException {
+		Path targetFilePath = super.buildTargetFilePath(sourceFilePath, setting);
 		if (properties.fileExt() != null) {
 			targetFilePath = withExtension(targetFilePath, properties.fileExt());
 		}
-		logger.info("Converting {}", sourceFilePath);
+		return targetFilePath;
+	}
+	
+	private void processFile(@Nonnull Path sourceFilePath, @Nonnull Path targetFilePath,
+			@Nullable Integer videoCodecId, @Nullable Integer audioCodecId)
+			throws FrameGrabber.Exception, FrameRecorder.Exception {
+		logger.info("Converting {} to {}", sourceFilePath, targetFilePath);
 		long start = System.currentTimeMillis();
 		long skippedFrameCount = 0;
 		try (
 				FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(sourceFilePath.toFile());
 				FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(targetFilePath.toFile(), 0);
 		) {
+			
 			grabber.start();
-			populate(recorder, grabber);
+			populate(recorder, grabber, videoCodecId, audioCodecId);
 			recorder.start();
 			Frame frame = null;
 			do {
@@ -116,24 +159,31 @@ class FFmpegConverter extends AbstractAction {
 				skippedFrameCount);
 	}
 	
-	private void populate(@Nonnull FFmpegFrameRecorder recorder, @Nonnull FFmpegFrameGrabber grabber)
-			throws ActionRunException {
+	private void populate(@Nonnull FFmpegFrameRecorder recorder, @Nonnull FFmpegFrameGrabber grabber,
+			@Nullable Integer videoCodecId, @Nullable Integer audioCodecId) {
 		recorder.setImageWidth(Objects.requireNonNullElse(properties.imageWidth(), grabber.getImageWidth()));
 		recorder.setImageHeight(Objects.requireNonNullElse(properties.imageHeight(), grabber.getImageHeight()));
+		recorder.setAudioChannels(grabber.getAudioChannels());
 		if (properties.aspectRatio() != null) {
 			recorder.setAspectRatio(properties.aspectRatio());
+		}
+		if (!properties.skipMetadata()) {
+			recorder.setMetadata(grabber.getMetadata());
 		}
 		if (properties.format() != null) {
 			recorder.setFormat(properties.format());
 		}
-		if (properties.videoCodec() != null) {
-			recorder.setVideoCodec(getValue(CODEC_MAP, properties.videoCodec()));
-		}
-		if (properties.videoCodecName() != null) {
-			recorder.setVideoCodecName(properties.videoCodecName());
-		}
 		if (properties.option() != null) {
 			properties.option().forEach(recorder::setOption);
+		}
+		if (videoCodecId != null) {
+			recorder.setVideoCodec(videoCodecId);
+		}
+		if (properties.videoEncoder() != null) {
+			recorder.setVideoCodecName(properties.videoEncoder());
+		}
+		if (properties.videoOption() != null) {
+			properties.videoOption().forEach(recorder::setVideoOption);
 		}
 		if (properties.videoBitrate() != null) {
 			recorder.setVideoBitrate(properties.videoBitrate());
@@ -149,16 +199,18 @@ class FFmpegConverter extends AbstractAction {
 		if (!properties.skipVideoMetadata()) {
 			recorder.setVideoMetadata(grabber.getVideoMetadata());
 		}
-		if (grabber.getAudioChannels() < 1) {
+		if (grabber.getAudioChannels() == 0) {
 			return;
 		}
 		recorder.setAudioChannels(grabber.getAudioChannels());
-		recorder.setSampleRate(grabber.getSampleRate());
-		if (properties.audioCodec() != null) {
-			recorder.setAudioCodec(getValue(CODEC_MAP, properties.audioCodec()));
+		if (audioCodecId != null) {
+			recorder.setAudioCodec(audioCodecId);
 		}
-		if (properties.audioCodecName() != null) {
-			recorder.setAudioCodecName(properties.audioCodecName());
+		if (properties.audioEncoder() != null) {
+			recorder.setAudioCodecName(properties.audioEncoder());
+		}
+		if (properties.audioOption() != null) {
+			properties.audioOption().forEach(recorder::setAudioOption);
 		}
 		if (properties.audioBitrate() != null) {
 			recorder.setAudioBitrate(properties.audioBitrate());
@@ -166,26 +218,6 @@ class FFmpegConverter extends AbstractAction {
 		if (!properties.skipAudioMetadata()) {
 			recorder.setAudioMetadata(grabber.getAudioMetadata());
 		}
-	}
-	
-	@Nonnull
-	private <T> T getValue(@Nonnull NamedMap<String,T> map, @Nonnull String name)
-			throws ActionRunException {
-		T value = map.get(name.toUpperCase());
-		if (value == null) {
-			throw new ActionRunException(getName(), "No \"" + name + "\" found in " + map.name);
-		}
-		return value;
-	}
-	
-	private static final class NamedMap<K, V> extends Hashtable<K,V> {
-		
-		final String name;
-		
-		NamedMap(@Nonnull String name) {
-			this.name = name;
-		}
-		
 	}
 	
 }

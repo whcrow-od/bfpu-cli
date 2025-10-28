@@ -74,15 +74,10 @@ class SettingImpl implements Setting {
 		return failTolerant;
 	}
 	
+	@Nonnull
 	@Override
 	public String toString() {
-		return new ToStringBuilder(this, ToStringStyle.NO_CLASS_NAME_STYLE)
-				.append("source", getSource().toAbsolutePath())
-				.append("destination", getDestination().toAbsolutePath())
-				.append("recursive", isRecursive())
-				.append("glob", getGlob())
-				.append("fail-tolerant", isFailTolerant())
-				.toString();
+		return ToStringBuilder.reflectionToString(this, ToStringStyle.NO_CLASS_NAME_STYLE);
 	}
 	
 }

@@ -4,6 +4,7 @@ import jakarta.annotation.Nonnull;
 import org.bytedeco.ffmpeg.avutil.LogCallback;
 import org.bytedeco.ffmpeg.global.avutil;
 import org.bytedeco.javacpp.BytePointer;
+import org.bytedeco.javacv.FFmpegLogCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.logging.LogLevel;
@@ -18,7 +19,7 @@ import static org.bytedeco.ffmpeg.global.avutil.AV_LOG_TRACE;
 import static org.bytedeco.ffmpeg.global.avutil.AV_LOG_VERBOSE;
 import static org.bytedeco.ffmpeg.global.avutil.AV_LOG_WARNING;
 
-class FFmpegConverterOutputLogCallback extends LogCallback {
+class FFmpegConverterOutputLogCallback extends FFmpegLogCallback {
 	
 	private static final Logger LOG = LoggerFactory.getLogger(FFmpegConverter.class.getName() + ":output");
 	private static final FFmpegConverterOutputLogCallback instance =
@@ -48,6 +49,7 @@ class FFmpegConverterOutputLogCallback extends LogCallback {
 	
 	@Override
 	public void call(int level, BytePointer msg) {
+		super.call(level, msg);
 		switch (level) {
 			case AV_LOG_PANIC, AV_LOG_FATAL, AV_LOG_ERROR -> LOG.error(msg.getString());
 			case AV_LOG_WARNING -> LOG.warn(msg.getString());

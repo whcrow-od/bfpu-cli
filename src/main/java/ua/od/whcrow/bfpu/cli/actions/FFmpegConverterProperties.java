@@ -1,5 +1,8 @@
 package ua.od.whcrow.bfpu.cli.actions;
 
+import jakarta.annotation.Nonnull;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.boot.logging.LogLevel;
@@ -15,18 +18,28 @@ record FFmpegConverterProperties(
 		Integer imageWidth,
 		Integer imageHeight,
 		Double aspectRatio,
+		boolean skipMetadata,
 		String format,
+		Map<String,String> option,
+		String videoEncoder,
+		Map<String,String> videoOption,
 		String videoCodec,
-		String videoCodecName,
-		Map<String, String> option,
 		Integer videoBitrate,
 		Double videoQuality,
 		Double frameRate,
 		Double displayRotation,
 		boolean skipVideoMetadata,
+		String audioEncoder,
+		Map<String,String> audioOption,
 		String audioCodec,
-		String audioCodecName,
 		Integer audioBitrate,
 		boolean skipAudioMetadata
 ) {
+	
+	@Nonnull
+	@Override
+	public String toString() {
+		return ToStringBuilder.reflectionToString(this, ToStringStyle.NO_CLASS_NAME_STYLE);
+	}
+	
 }

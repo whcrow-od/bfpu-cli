@@ -40,26 +40,27 @@ public abstract class AbstractAction implements Action {
 	}
 	
 	@Nonnull
-	protected Path buildTargetFilePath(@Nonnull Path sourceDir, @Nonnull Path sourceFile, @Nonnull Path destinationDir)
+	protected Path buildTargetFilePath(@Nonnull Path sourceDirPath, @Nonnull Path sourceFilePath,
+			@Nonnull Path destinationDirPath)
 			throws ActionRunException {
-		Path fileRelPath = sourceDir.relativize(sourceFile);
-		Path targetFile = destinationDir.resolve(fileRelPath);
+		Path fileRelPath = sourceDirPath.relativize(sourceFilePath);
+		Path targetFile = destinationDirPath.resolve(fileRelPath);
 		Path targetDirPath = targetFile.getParent();
 		if (Files.notExists(targetDirPath)) {
 			try {
 				Files.createDirectories(targetDirPath);
 			} catch (IOException e) {
 				throw new ActionRunException(getName(), "Failed to create a target sub-dir/s " + targetDirPath
-						+ " for " + sourceFile, e);
+						+ " for " + sourceFilePath, e);
 			}
 		}
 		return targetFile;
 	}
 	
 	@Nonnull
-	protected Path buildTargetFilePath(@Nonnull Path sourceFile, @Nonnull Setting setting)
+	protected Path buildTargetFilePath(@Nonnull Path sourceFilePath, @Nonnull Setting setting)
 			throws ActionRunException {
-		return buildTargetFilePath(setting.getSource(), sourceFile, setting.getDestination());
+		return buildTargetFilePath(setting.getSource(), sourceFilePath, setting.getDestination());
 	}
 	
 	@Nonnull
