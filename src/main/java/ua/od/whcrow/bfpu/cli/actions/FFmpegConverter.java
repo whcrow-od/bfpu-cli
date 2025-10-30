@@ -128,35 +128,22 @@ class FFmpegConverter extends AbstractAction {
 			throws FrameGrabber.Exception, FrameRecorder.Exception {
 		logger.info("Converting {} to {}", sourceFilePath, targetFilePath);
 		long start = System.currentTimeMillis();
-		long skippedFrameCount = 0;
+		long imageFrameNum;
 		try (
 				FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(sourceFilePath.toFile());
 				FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(targetFilePath.toFile(), 0);
 		) {
-			
 			grabber.start();
 			populate(recorder, grabber, videoCodecId, audioCodecId);
 			recorder.start();
-			Frame frame = null;
-			do {
-				try {
-					frame = grabber.grab();
-					recorder.record(frame);
-				} catch (FrameGrabber.Exception | FrameRecorder.Exception e) {
-					if (properties.skipFailFrame()) {
-						skippedFrameCount++;
-						continue;
-					}
-					throw e;
-				}
-			} while (frame != null);
+			Frame frame;
+			while ((frame = grabber.grab()) != null) {
+				recorder.record(frame);
+			}
+			imageFrameNum = recorder.getFrameNumber();
 		}
-		if (skippedFrameCount == 0) {
-			logger.info("Converted {} in {} ms", sourceFilePath, System.currentTimeMillis() - start);
-			return;
-		}
-		logger.warn("Converted {} in {} ms, {} frames skipped", sourceFilePath, System.currentTimeMillis() - start,
-				skippedFrameCount);
+		logger.info("Converted {} to {} ({} frames) in {} ms", sourceFilePath, targetFilePath, imageFrameNum,
+				System.currentTimeMillis() - start);
 	}
 	
 	private void populate(@Nonnull FFmpegFrameRecorder recorder, @Nonnull FFmpegFrameGrabber grabber,
@@ -191,7 +178,9 @@ class FFmpegConverter extends AbstractAction {
 		if (properties.videoQuality() != null) {
 			recorder.setVideoQuality(properties.videoQuality());
 		}
-		if (properties.frameRate() != null) {
+		if (properties.frameRate() == null) {
+			recorder.setFrameRate(grabber.getFrameRate());
+		} else {
 			recorder.setFrameRate(properties.frameRate());
 		}
 		recorder.setDisplayRotation(Objects.requireNonNullElse(properties.displayRotation(),
@@ -214,6 +203,9 @@ class FFmpegConverter extends AbstractAction {
 		}
 		if (properties.audioBitrate() != null) {
 			recorder.setAudioBitrate(properties.audioBitrate());
+		}
+		if (properties.sampleRate() != null) {
+			recorder.setSampleRate(properties.sampleRate());
 		}
 		if (!properties.skipAudioMetadata()) {
 			recorder.setAudioMetadata(grabber.getAudioMetadata());

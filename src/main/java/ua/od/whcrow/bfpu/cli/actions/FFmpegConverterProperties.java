@@ -14,7 +14,6 @@ record FFmpegConverterProperties(
 		@DefaultValue(value = "OFF")
 		LogLevel outputLogLevel,
 		String fileExt,
-		boolean skipFailFrame,
 		Integer imageWidth,
 		Integer imageHeight,
 		Double aspectRatio,
@@ -33,6 +32,7 @@ record FFmpegConverterProperties(
 		Map<String,String> audioOption,
 		String audioCodec,
 		Integer audioBitrate,
+		Integer sampleRate,
 		boolean skipAudioMetadata
 ) {
 	
