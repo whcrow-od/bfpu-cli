@@ -18,6 +18,8 @@ public interface Setting {
 	@Nullable
 	String getGlob();
 	
+	boolean getSkipOnExistingTarget();
+	
 	boolean isFailTolerant();
 	
 }

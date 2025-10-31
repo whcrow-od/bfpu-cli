@@ -13,6 +13,7 @@ import ua.od.whcrow.bfpu.cli.exceptions.ActionRunException;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
@@ -66,6 +67,11 @@ class CommandLineAction extends AbstractAction {
 	private void processFile(@Nonnull Path sourceFilePath, @Nonnull Setting setting)
 			throws ActionRunException {
 		Path targetFilePath = buildTargetFilePath(sourceFilePath, setting);
+		if (setting.getSkipOnExistingTarget() && Files.exists(targetFilePath)) {
+			logger.info("Skip a command execution for {} because target {} already exists", sourceFilePath,
+					targetFilePath);
+			return;
+		}
 		try {
 			execCommand(sourceFilePath, targetFilePath);
 		} catch (IOException | InterruptedException e) {

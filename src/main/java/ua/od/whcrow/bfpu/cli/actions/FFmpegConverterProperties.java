@@ -14,25 +14,32 @@ record FFmpegConverterProperties(
 		@DefaultValue(value = "OFF")
 		LogLevel outputLogLevel,
 		String fileExt,
+		
 		Integer imageWidth,
 		Integer imageHeight,
 		Double aspectRatio,
 		boolean skipMetadata,
 		String format,
 		Map<String,String> option,
+		
 		String videoEncoder,
 		Map<String,String> videoOption,
 		String videoCodec,
 		Integer videoBitrate,
 		Double videoQuality,
-		Double frameRate,
+		Integer frameRate,
+		Integer frameRateMin,
+		Integer frameRateMax,
 		Double displayRotation,
 		boolean skipVideoMetadata,
+		
 		String audioEncoder,
 		Map<String,String> audioOption,
 		String audioCodec,
 		Integer audioBitrate,
 		Integer sampleRate,
+		Integer sampleRateMin,
+		Integer sampleRateMax,
 		boolean skipAudioMetadata
 ) {
 	

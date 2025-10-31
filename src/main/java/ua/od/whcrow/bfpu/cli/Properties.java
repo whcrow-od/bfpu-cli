@@ -9,4 +9,5 @@ record Properties (
 		String destination,
 		boolean recursive,
 		String glob,
+		boolean skipOnExistingTarget,
 		boolean failTolerant) {}

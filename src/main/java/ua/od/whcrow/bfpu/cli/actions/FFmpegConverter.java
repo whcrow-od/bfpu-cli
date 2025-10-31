@@ -17,6 +17,7 @@ import ua.od.whcrow.bfpu.cli._commons.ExceptionUtil;
 import ua.od.whcrow.bfpu.cli.exceptions.ActionRunException;
 
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Map;
@@ -69,9 +70,14 @@ class FFmpegConverter extends AbstractAction {
 		Integer audioCodecId = getCodecId(properties.audioEncoder(), properties.audioCodec(), "audio");
 		try (Stream<Path> pathStream = createPathStream(setting)) {
 			for (Path sourceFilePath : (Iterable<Path>) pathStream::iterator) {
+				Path targetFilePath = buildTargetFilePath(sourceFilePath, setting);
+				if (setting.getSkipOnExistingTarget() && Files.exists(targetFilePath)) {
+					logger.info("Skip converting of {} because target {} already exists", sourceFilePath,
+							targetFilePath);
+					continue;
+				}
 				try {
-					processFile(sourceFilePath, buildTargetFilePath(sourceFilePath, setting), videoCodecId,
-							audioCodecId);
+					processFile(sourceFilePath, targetFilePath, videoCodecId, audioCodecId);
 				} catch (FrameGrabber.Exception | FrameRecorder.Exception e) {
 					String message = "Failed to convert the source file " + sourceFilePath;
 					if (setting.isFailTolerant()) {
@@ -128,7 +134,6 @@ class FFmpegConverter extends AbstractAction {
 			throws FrameGrabber.Exception, FrameRecorder.Exception {
 		logger.info("Converting {} to {}", sourceFilePath, targetFilePath);
 		long start = System.currentTimeMillis();
-		long imageFrameNum;
 		try (
 				FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(sourceFilePath.toFile());
 				FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(targetFilePath.toFile(), 0);
@@ -136,14 +141,9 @@ class FFmpegConverter extends AbstractAction {
 			grabber.start();
 			populate(recorder, grabber, videoCodecId, audioCodecId);
 			recorder.start();
-			Frame frame;
-			while ((frame = grabber.grab()) != null) {
-				recorder.record(frame);
-			}
-			imageFrameNum = recorder.getFrameNumber();
+			convert(grabber, recorder);
 		}
-		logger.info("Converted {} to {} ({} frames) in {} ms", sourceFilePath, targetFilePath, imageFrameNum,
-				System.currentTimeMillis() - start);
+		logger.info("Converted {} to {} in {} ms", sourceFilePath, targetFilePath, System.currentTimeMillis() - start);
 	}
 	
 	private void populate(@Nonnull FFmpegFrameRecorder recorder, @Nonnull FFmpegFrameGrabber grabber,
@@ -179,7 +179,14 @@ class FFmpegConverter extends AbstractAction {
 			recorder.setVideoQuality(properties.videoQuality());
 		}
 		if (properties.frameRate() == null) {
-			recorder.setFrameRate(grabber.getFrameRate());
+			if (properties.frameRateMin() != null && grabber.getFrameRate() < properties.frameRateMin()) {
+				recorder.setFrameRate(properties.frameRateMin());
+			} else if (properties.frameRateMax() != null && grabber.getFrameRate() > properties.frameRateMax()) {
+				recorder.setFrameRate(properties.frameRateMax());
+			}
+			else {
+				recorder.setFrameRate(grabber.getFrameRate());
+			}
 		} else {
 			recorder.setFrameRate(properties.frameRate());
 		}
@@ -204,11 +211,66 @@ class FFmpegConverter extends AbstractAction {
 		if (properties.audioBitrate() != null) {
 			recorder.setAudioBitrate(properties.audioBitrate());
 		}
-		if (properties.sampleRate() != null) {
+		if (properties.sampleRate() == null) {
+			if (properties.sampleRateMin() != null && grabber.getSampleRate() < properties.sampleRateMin()) {
+				recorder.setSampleRate(properties.sampleRateMin());
+			} else if (properties.sampleRateMax() != null && grabber.getSampleRate() > properties.sampleRateMax()) {
+				recorder.setSampleRate(properties.sampleRateMax());
+			} else {
+				recorder.setSampleRate(grabber.getSampleRate());
+			}
+		} else {
 			recorder.setSampleRate(properties.sampleRate());
 		}
 		if (!properties.skipAudioMetadata()) {
 			recorder.setAudioMetadata(grabber.getAudioMetadata());
+		}
+	}
+	
+	private void convert(@Nonnull FFmpegFrameGrabber grabber, @Nonnull FFmpegFrameRecorder recorder)
+			throws FFmpegFrameGrabber.Exception, FFmpegFrameRecorder.Exception {
+		double grabberFrameRate = grabber.getFrameRate();
+		logger.debug("Source frame rate is {}", grabberFrameRate);
+		logger.debug("Target frame rate is {}", recorder.getFrameRate());
+		double lengthInSec = (double) grabber.getLengthInTime() / 1000000L;
+		logger.debug("Video length {} sec", lengthInSec);
+		if (Math.floor(grabberFrameRate) == Math.floor(recorder.getFrameRate())) {
+			if (grabberFrameRate == recorder.getFrameRate()) {
+				logger.info("Difference between source/target frame rate is insufficient, "
+						+ "therefore recording all frames (skipping the frame drop/duplicate procedure)");
+			}
+			recordAllFrames(grabber, recorder);
+			return;
+		}
+		double totalFrameNum = grabberFrameRate * lengthInSec;
+		logger.debug("Expecting {} image frames to be grabbed (approximately)", Math.round(totalFrameNum));
+		double newFrameNum = lengthInSec * recorder.getFrameRate();
+		logger.debug("Expecting {} image frames to be recorded (approximately)", Math.round(newFrameNum));
+		double step = totalFrameNum / newFrameNum;
+		logger.debug("Frame drop/duplicate step is {}", step);
+		long recordedFrameNumber = 0, grabbedFrameIndex = 0;
+		Frame frame;
+		while ((frame = grabber.grab()) != null) {
+			if (frame.image == null) {
+				recorder.record(frame);
+				continue;
+			}
+			long requiredFrameIndex;
+			while ((requiredFrameIndex = Math.round(recordedFrameNumber  * step)) == grabbedFrameIndex) {
+				recorder.record(frame);
+				logger.trace("Recorded a grabbed frame #{} as frame#{}", requiredFrameIndex, recordedFrameNumber);
+				recordedFrameNumber++;
+			}
+			grabbedFrameIndex++;
+		}
+		logger.debug("Grabbed {} frames, recorded {} frames", grabbedFrameIndex, recordedFrameNumber);
+	}
+	
+	private static void recordAllFrames(@Nonnull FFmpegFrameGrabber grabber, @Nonnull FFmpegFrameRecorder recorder)
+			throws FFmpegFrameGrabber.Exception, FFmpegFrameRecorder.Exception {
+		Frame frame;
+		while ((frame = grabber.grab()) != null) {
+			recorder.record(frame);
 		}
 	}
 	

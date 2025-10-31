@@ -19,6 +19,7 @@ class SettingImpl implements Setting {
 	private final Path destination;
 	private final boolean recursive;
 	private final String glob;
+	private final boolean skipOnExsistingTarget;
 	private final boolean failTolerant;
 	
 	SettingImpl(@Nonnull Properties properties, boolean helpOnly)
@@ -43,6 +44,7 @@ class SettingImpl implements Setting {
 		}
 		recursive = properties.recursive();
 		glob = properties.glob();
+		skipOnExsistingTarget = properties.skipOnExistingTarget();
 		failTolerant = properties.failTolerant();
 	}
 	
@@ -67,6 +69,11 @@ class SettingImpl implements Setting {
 	@Override
 	public String getGlob() {
 		return glob;
+	}
+	
+	@Override
+	public boolean getSkipOnExistingTarget() {
+		return skipOnExsistingTarget;
 	}
 	
 	@Override
